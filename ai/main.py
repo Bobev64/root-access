@@ -1,116 +1,145 @@
+import sys
 from ultralytics import YOLO
 
-print("Starting GreenVision...")
 
 # ==========================================
-# 1. LOAD OUR TWO AI MODELS
+# LOAD GREENVISION AI MODELS
 # ==========================================
 
-# Detects tomatoes and their ripeness
 ripeness_model = YOLO("models/tomato_ripeness.pt")
-
-# Classifies the plant's growth stage
 growth_model = YOLO("models/tomato_growth.pt")
 
 
 # ==========================================
-# 2. IMAGE TO ANALYZE
+# ANALYZE A TOMATO PLANT
 # ==========================================
 
-image_path = "tomatoleaf.jpg"
+def analyze_plant(image_path):
+
+    # --------------------------------------
+    # TOMATO + RIPENESS DETECTION
+    # --------------------------------------
+
+    ripeness_results = ripeness_model(
+        image_path,
+        conf=0.5,
+        verbose=False
+    )
+
+    ripeness_result = ripeness_results[0]
+
+    ripe_count = 0
+    halfripe_count = 0
+    unripe_count = 0
+
+    for box in ripeness_result.boxes:
+
+        class_id = int(box.cls[0])
+        class_name = ripeness_model.names[class_id]
+
+        if class_name == "ripe":
+            ripe_count += 1
+
+        elif class_name == "half_ripe":
+            halfripe_count += 1
+
+        elif class_name == "unripe":
+            unripe_count += 1
 
 
-# ==========================================
-# 3. TOMATO + RIPENESS DETECTION
-# ==========================================
-
-ripeness_results = ripeness_model(image_path, conf=0.5)
-ripeness_result = ripeness_results[0]
-
-ripe_count = 0
-halfripe_count = 0
-unripe_count = 0
-
-for box in ripeness_result.boxes:
-
-    class_id = int(box.cls[0])
-    class_name = ripeness_model.names[class_id]
-
-    if class_name == "ripe":
-        ripe_count += 1
-
-    elif class_name == "half_ripe":
-        halfripe_count += 1
-
-    elif class_name == "unripe":
-        unripe_count += 1
+    total_tomatoes = (
+        ripe_count
+        + halfripe_count
+        + unripe_count
+    )
 
 
-# Calculate total tomatoes
-total_tomatoes = (
-    ripe_count
-    + halfripe_count
-    + unripe_count
-)
+    # --------------------------------------
+    # DETERMINE GROWTH STAGE
+    # --------------------------------------
+
+    if total_tomatoes > 0:
+
+        growth_stage = "Fruiting / Ripening"
+
+    else:
+
+        growth_results = growth_model(
+            image_path,
+            verbose=False
+        )
+
+        growth_result = growth_results[0]
+
+        class_id = growth_result.probs.top1
+        growth_stage = growth_model.names[class_id]
 
 
-# ==========================================
-# 4. DETERMINE GROWTH STAGE
-# ==========================================
+        if growth_stage == "Early_Vegetative":
+            growth_stage = "Early Vegetative"
 
-# If tomatoes are visible, we already know
-# the plant has reached the fruiting stage.
-if total_tomatoes > 0:
-
-    growth_stage = "Fruiting / Ripening"
-
-else:
-
-    # No tomatoes detected, so ask our
-    # growth-stage classification model.
-    growth_results = growth_model(image_path)
-    growth_result = growth_results[0]
-
-    # Get the class with the highest probability
-    class_id = growth_result.probs.top1
-
-    growth_stage = growth_model.names[class_id]
+        elif growth_stage == "Flowering_Initiation":
+            growth_stage = "Flowering Initiation"
 
 
-# Make class names prettier
-if growth_stage == "Early_Vegetative":
-    growth_stage = "Early Vegetative"
+    # --------------------------------------
+    # STRUCTURED RESULTS
+    # --------------------------------------
 
-elif growth_stage == "Flowering_Initiation":
-    growth_stage = "Flowering Initiation"
+    results = {
+        "growth_stage": growth_stage,
+        "total_tomatoes": total_tomatoes,
+        "ripe": ripe_count,
+        "half_ripe": halfripe_count,
+        "unripe": unripe_count
+    }
 
-
-# ==========================================
-# 5. PRINT GREENVISION RESULTS
-# ==========================================
-
-print()
-print("================================")
-print("       GREENVISION RESULTS")
-print("================================")
-print()
-
-print("Growth Stage:", growth_stage)
-
-print()
-print("Total Tomatoes:", total_tomatoes)
-
-print()
-print("Ripe:", ripe_count)
-print("Half-ripe:", halfripe_count)
-print("Unripe:", unripe_count)
-
-print()
-print("================================")
+    return results, ripeness_result
 
 
 # ==========================================
-# 6. SHOW IMAGE WITH DETECTION BOXES
+# RUN PROGRAM
 # ==========================================
 
-ripeness_result.show()
+if __name__ == "__main__":
+
+    print("Starting GreenVision...")
+
+    if len(sys.argv) < 2:
+        print("Please provide an image.")
+        print(
+            "Example: python main.py tomatoplantreal.jpg"
+        )
+        sys.exit()
+
+    image_path = sys.argv[1]
+
+    results, detection_image = analyze_plant(image_path)
+
+
+    # --------------------------------------
+    # DISPLAY RESULTS
+    # --------------------------------------
+
+    print()
+    print("================================")
+    print("       GREENVISION RESULTS")
+    print("================================")
+    print()
+
+    print("Growth Stage:", results["growth_stage"])
+
+    print()
+    print("Total Tomatoes:", results["total_tomatoes"])
+
+    print()
+    print("Ripe:", results["ripe"])
+    print("Half-ripe:", results["half_ripe"])
+    print("Unripe:", results["unripe"])
+
+    print()
+    print("================================")
+
+
+    # Show image with YOLO detection boxes
+    detection_image.show()
